@@ -6,13 +6,15 @@ import functools
 # TODO
 # Server print
 # Server logs
-# Private messages
 # Security
 # High scalability
 # federation
 # special emoticons
 # web client
 # mobile client
+# changer les string formats
+# tests
+# list commands
 
 WELCOME_STR = "Welcome to the XYZ chat server"
 WELCOME_USER_STR = "Welcome, %s!"
@@ -29,7 +31,10 @@ JOIN_ROOM_STR = "Entering room: %s"
 DEFAULT_ROOM_STR = "DEFAULT"
 QUIT_STR = "BYE"
 JOIN_ROOM_ERR_STR = "You are not in a room.\nType /join <room> to join a room.\nType /rooms to see the available rooms"
-
+NO_USER_NAMED_STR = "There is no user %s."
+WRONG_SYNTAX_SEND_PM_STR = 'Type "/pm username message" to write a private message.'
+PRIVATE_MSG_STR = "*PM* {}: {}"
+INVALID_NAME_STR = "Sorry, invalid name."
 class Chat(LineReceiver):
 
     def __init__(self, rooms):
@@ -37,7 +42,12 @@ class Chat(LineReceiver):
         self.currentRoom = None
         self.name = None
         self.state = "GETNAME"
-        self.actions = {"/users": self.handle_USERS, "/quit": self.handle_QUIT, "/leave": self.handle_LEAVE, "/rooms": self.handle_ROOMS, "/join": self.handle_JOIN}
+        self.actions = {"/users": self.handle_USERS,
+                        "/quit": self.handle_QUIT,
+                        "/leave": self.handle_LEAVE,
+                        "/rooms": self.handle_ROOMS,
+                        "/join": self.handle_JOIN,
+                        "/pm": self.handle_PM}
     def connectionMade(self):
         self.sendLine("%s\n%s" % (WELCOME_STR, ASK_LOGIN_STR))
 
@@ -53,6 +63,11 @@ class Chat(LineReceiver):
             self.handle_CHAT(line)
 
     def handle_GETNAME(self, name):
+        name = name.strip()
+        if not name:
+            self.sendLine(INVALID_NAME_STR)
+            return
+        name = name.split(" ")[0]
         if not self.nameIsFree(name):
             self.sendLine(NAME_TAKEN_STR)
         elif name in self.actions.keys():
@@ -121,6 +136,24 @@ class Chat(LineReceiver):
             if len(self.getUsers()) == 0:
                 del self.rooms[self.currentRoom]
         self.currentRoom = None
+
+    def handle_PM(self, message):
+        user = None
+
+        splitted = message.split(" ")
+        if len(splitted) == 1:
+            self.sendLine(WRONG_SYNTAX_SEND_PM_STR)
+            return
+        else:
+            user = splitted[0].strip()
+            message = " ".join(splitted[1:])
+
+        for room in self.rooms.values():
+            for name, protocol in room.iteritems():
+                if name == user:
+                    protocol.sendLine(PRIVATE_MSG_STR.format(self.name, message))
+                    return
+        self.sendLine(NO_USER_NAMED_STR % user)
 
     def sendMessage(self, message):
         message = "%s: %s" % (self.name, message)
