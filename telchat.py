@@ -41,17 +41,17 @@ class Chat(LineReceiver):
                         "/pm": self.handle_PM,
                         "/help": self.handle_HELP}
 
-    def connection_made(self):
+    def connectionMade(self):
         self.log("A connection was made with.")
         self.sendLine("{0}\n{1}".format(WELCOME_STR, ASK_LOGIN_STR))
 
-    def connection_lost(self, reason):
+    def connectionLost(self, reason):
         self.log("A connection was closed.")
         if self.currentRoom:
-            if self.name in self.get_users():
-                del self.get_users()[self.name]
+            if self.name in self.getUsers():
+                del self.getUsers()[self.name]
 
-    def line_received(self, line):
+    def lineReceived(self, line):
         if self.state == "GETNAME":
             self.handle_GETNAME(line)
         else:
@@ -63,7 +63,7 @@ class Chat(LineReceiver):
             self.sendLine(INVALID_NAME_STR)
             return
         name = name.split(" ")[0]
-        if not self.name_is_free(name):
+        if not self.nameIsFree(name):
             self.sendLine(NAME_TAKEN_STR)
         elif name in self.actions.keys():
             self.sendLine(NAME_RESERVED_STR)
@@ -82,13 +82,13 @@ class Chat(LineReceiver):
             self.actions[words[0]](" ".join(words[1:]))
             return
         else:
-            self.send_message(message)
+            self.sendMessage(message)
 
     def handle_USERS(self, message = None):
         if self.currentRoom:
             usersStr = ""
-            for name, protocol in self.get_users().iteritems():
-                usersStr += SHOW_USER_STR.format(self.format_username(name))
+            for name, protocol in self.getUsers().iteritems():
+                usersStr += SHOW_USER_STR.format(self.formatUsername(name))
             usersStr += END_OF_LIST_STR
             self.sendLine(usersStr)
         else:
@@ -102,10 +102,10 @@ class Chat(LineReceiver):
         self.sendLine(roomsStr)
 
     def handle_QUIT(self, message = None):
-        self.send_everyone(USER_LEFT_ROOM_STR.format(self.currentRoom, self.name))
+        self.sendEveryone(USER_LEFT_ROOM_STR.format(self.currentRoom, self.name))
         if self.currentRoom:
-            if self.name in self.get_users():
-                del self.get_users()[self.name]
+            if self.name in self.getUsers():
+                del self.getUsers()[self.name]
         self.sendLine(QUIT_STR)
         self.transport.loseConnection()
 
@@ -118,20 +118,20 @@ class Chat(LineReceiver):
         if room not in self.rooms:
             self.rooms[room] = {}
             self.log("{0} room was created.".format(self.currentRoom))
-        self.get_users()[self.name] = self
+        self.getUsers()[self.name] = self
         self.sendLine(JOIN_ROOM_STR.format(room))
-        self.send_everyone(USER_JOINED_ROOM_STR.format(self.currentRoom, self.name))
+        self.sendEveryone(USER_JOINED_ROOM_STR.format(self.currentRoom, self.name))
         self.log("{0} joined room {1}".format(self.name, self.currentRoom))
 
         self.handle_USERS()
 
     def handle_LEAVE(self, message = None):
-        self.send_everyone(USER_LEFT_ROOM_STR.format(self.currentRoom, self.name))
-        self.sendLine(USER_LEFT_ROOM_STR.format(self.currentRoom, self.format_username(self.name)))
+        self.sendEveryone(USER_LEFT_ROOM_STR.format(self.currentRoom, self.name))
+        self.sendLine(USER_LEFT_ROOM_STR.format(self.currentRoom, self.formatUsername(self.name)))
         self.log("{0} left room {1}".format(self.name, self.currentRoom))
-        if self.name in self.get_users():
-            del self.get_users()[self.name]
-            if len(self.get_users()) == 0:
+        if self.name in self.getUsers():
+            del self.getUsers()[self.name]
+            if len(self.getUsers()) == 0:
                 del self.rooms[self.currentRoom]
                 self.log("{0} room was removed.".format(self.currentRoom))
         self.currentRoom = None
@@ -157,28 +157,28 @@ class Chat(LineReceiver):
     def handle_HELP(self, message = None):
         self.sendLine(HELP_STR)
 
-    def send_message(self, message):
+    def sendMessage(self, message):
         message = "{0}: {1}".format(self.name, message)
-        self.send_everyone(message)
+        self.sendEveryone(message)
 
-    def send_everyone(self, message):
+    def sendEveryone(self, message):
         if not self.currentRoom:
             self.sendLine(JOIN_ROOM_ERR_STR)
         else:
-            for name, protocol in self.get_users().iteritems():
+            for name, protocol in self.getUsers().iteritems():
                 if protocol != self:
                     protocol.sendLine(message)
 
-    def format_username(self, username):
+    def formatUsername(self, username):
         if username == self.name:
             return "{0} (** This is you)".format(username)
         else:
             return "{0}".format(username)
 
-    def get_users(self):
+    def getUsers(self):
         return self.rooms[self.currentRoom]
 
-    def name_is_free(self, name):
+    def nameIsFree(self, name):
         for room in self.rooms.values():
             if name in room:
                 return False
@@ -193,7 +193,7 @@ class ChatFactory(Factory):
     def __init__(self):
         self.rooms = {DEFAULT_ROOM_STR : {}}
 
-    def build_protocol(self, addr):
+    def buildProtocol(self, addr):
         return Chat(self.rooms)
 
 if __name__ == '__main__':
