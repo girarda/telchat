@@ -1,11 +1,10 @@
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor
-import functools
 import sys
 
 WELCOME_STR = "Welcome to the XYZ chat server"
-WELCOME_USER_STR = "Welcome, {}!"
+WELCOME_USER_STR = "Welcome, {0}!"
 ASK_LOGIN_STR = "Login Name?"
 NAME_TAKEN_STR = "Sorry, name taken."
 NAME_RESERVED_STR = "Sorry, name reserved."
