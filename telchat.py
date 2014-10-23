@@ -2,39 +2,30 @@ from twisted.internet.protocol import Factory
 from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor
 import functools
-
-# TODO
-# Server print
-# Server logs
-# Security
-# High scalability
-# federation
-# special emoticons
-# web client
-# mobile client
-# changer les string formats
-# tests
-# list commands
+import sys
 
 WELCOME_STR = "Welcome to the XYZ chat server"
-WELCOME_USER_STR = "Welcome, %s!"
+WELCOME_USER_STR = "Welcome, {}!"
 ASK_LOGIN_STR = "Login Name?"
 NAME_TAKEN_STR = "Sorry, name taken."
 NAME_RESERVED_STR = "Sorry, name reserved."
-USER_JOINED_ROOM_STR = "* new user joined {}: {}"
-USER_LEFT_ROOM_STR = "* user has left {}: {}"
-SHOW_USER_STR = "* %s\n"
+USER_JOINED_ROOM_STR = "* new user joined {0}: {1}"
+USER_LEFT_ROOM_STR = "* user has left {0}: {1}"
+SHOW_USER_STR = "* {0}\n"
 SHOW_ROOMS_STR = "Active rooms are:\n"
-SHOW_ROOM_STR = "* {} ({})\n"
+SHOW_ROOM_STR = "* {0} ({1})\n"
 END_OF_LIST_STR = "end of list"
-JOIN_ROOM_STR = "Entering room: %s"
+JOIN_ROOM_STR = "Entering room: {0}"
 DEFAULT_ROOM_STR = "DEFAULT"
 QUIT_STR = "BYE"
 JOIN_ROOM_ERR_STR = "You are not in a room.\nType /join <room> to join a room.\nType /rooms to see the available rooms"
-NO_USER_NAMED_STR = "There is no user %s."
+NO_USER_NAMED_STR = "There is no user {0}."
 WRONG_SYNTAX_SEND_PM_STR = 'Type "/pm username message" to write a private message.'
-PRIVATE_MSG_STR = "*PM* {}: {}"
+PRIVATE_MSG_STR = "*PM* {0}: {1}"
 INVALID_NAME_STR = "Sorry, invalid name."
+HELP_STR = "* Type the following comands:\n/users\tSee the users in the room\n/rooms\tSee the available rooms\n/join\tJoin a room\n/pm\tSend a private message to another user\n/help\tShow the help\n/leave\tLeave the current room\n/quit\tQuit"
+USAGE_STR = "usage: python telchat.py <port>"
+
 class Chat(LineReceiver):
 
     def __init__(self, rooms):
@@ -47,16 +38,20 @@ class Chat(LineReceiver):
                         "/leave": self.handle_LEAVE,
                         "/rooms": self.handle_ROOMS,
                         "/join": self.handle_JOIN,
-                        "/pm": self.handle_PM}
-    def connectionMade(self):
-        self.sendLine("%s\n%s" % (WELCOME_STR, ASK_LOGIN_STR))
+                        "/pm": self.handle_PM,
+                        "/help": self.handle_HELP}
 
-    def connectionLost(self, reason):
+    def connection_made(self):
+        self.log("A connection was made with.")
+        self.sendLine("{0}\n{1}".format(WELCOME_STR, ASK_LOGIN_STR))
+
+    def connection_lost(self, reason):
+        self.log("A connection was closed.")
         if self.currentRoom:
-            if self.name in self.getUsers():
-                del self.getUsers()[self.name]
+            if self.name in self.get_users():
+                del self.get_users()[self.name]
 
-    def lineReceived(self, line):
+    def line_received(self, line):
         if self.state == "GETNAME":
             self.handle_GETNAME(line)
         else:
@@ -68,13 +63,13 @@ class Chat(LineReceiver):
             self.sendLine(INVALID_NAME_STR)
             return
         name = name.split(" ")[0]
-        if not self.nameIsFree(name):
+        if not self.name_is_free(name):
             self.sendLine(NAME_TAKEN_STR)
         elif name in self.actions.keys():
             self.sendLine(NAME_RESERVED_STR)
         else:
             self.name = name
-            self.sendLine(WELCOME_USER_STR % self.name)
+            self.sendLine(WELCOME_USER_STR.format(self.name))
             self.handle_JOIN(DEFAULT_ROOM_STR)
             self.state = "CHAT"
 
@@ -87,13 +82,13 @@ class Chat(LineReceiver):
             self.actions[words[0]](" ".join(words[1:]))
             return
         else:
-            self.sendMessage(message)
+            self.send_message(message)
 
     def handle_USERS(self, message = None):
         if self.currentRoom:
             usersStr = ""
-            for name, protocol in self.getUsers().iteritems():
-                usersStr += SHOW_USER_STR % self.formatUsername(name)
+            for name, protocol in self.get_users().iteritems():
+                usersStr += SHOW_USER_STR.format(self.format_username(name))
             usersStr += END_OF_LIST_STR
             self.sendLine(usersStr)
         else:
@@ -109,8 +104,8 @@ class Chat(LineReceiver):
     def handle_QUIT(self, message = None):
         self.send_everyone(USER_LEFT_ROOM_STR.format(self.currentRoom, self.name))
         if self.currentRoom:
-            if self.name in self.getUsers():
-                del self.getUsers()[self.name]
+            if self.name in self.get_users():
+                del self.get_users()[self.name]
         self.sendLine(QUIT_STR)
         self.transport.loseConnection()
 
@@ -122,19 +117,23 @@ class Chat(LineReceiver):
         self.currentRoom = room
         if room not in self.rooms:
             self.rooms[room] = {}
-        self.getUsers()[self.name] = self
-        self.sendLine(JOIN_ROOM_STR % room)
+            self.log("{0} room was created.".format(self.currentRoom))
+        self.get_users()[self.name] = self
+        self.sendLine(JOIN_ROOM_STR.format(room))
         self.send_everyone(USER_JOINED_ROOM_STR.format(self.currentRoom, self.name))
+        self.log("{0} joined room {1}".format(self.name, self.currentRoom))
 
         self.handle_USERS()
 
     def handle_LEAVE(self, message = None):
         self.send_everyone(USER_LEFT_ROOM_STR.format(self.currentRoom, self.name))
-        self.sendLine(USER_LEFT_ROOM_STR.format(self.currentRoom, self.formatUsername(self.name)))
-        if self.name in self.getUsers():
-            del self.getUsers()[self.name]
-            if len(self.getUsers()) == 0:
+        self.sendLine(USER_LEFT_ROOM_STR.format(self.currentRoom, self.format_username(self.name)))
+        self.log("{0} left room {1}".format(self.name, self.currentRoom))
+        if self.name in self.get_users():
+            del self.get_users()[self.name]
+            if len(self.get_users()) == 0:
                 del self.rooms[self.currentRoom]
+                self.log("{0} room was removed.".format(self.currentRoom))
         self.currentRoom = None
 
     def handle_PM(self, message):
@@ -153,43 +152,58 @@ class Chat(LineReceiver):
                 if name == user:
                     protocol.sendLine(PRIVATE_MSG_STR.format(self.name, message))
                     return
-        self.sendLine(NO_USER_NAMED_STR % user)
+        self.sendLine(NO_USER_NAMED_STR.format(user))
 
-    def sendMessage(self, message):
-        message = "%s: %s" % (self.name, message)
+    def handle_HELP(self, message = None):
+        self.sendLine(HELP_STR)
+
+    def send_message(self, message):
+        message = "{0}: {1}".format(self.name, message)
         self.send_everyone(message)
 
     def send_everyone(self, message):
         if not self.currentRoom:
             self.sendLine(JOIN_ROOM_ERR_STR)
         else:
-            for name, protocol in self.getUsers().iteritems():
+            for name, protocol in self.get_users().iteritems():
                 if protocol != self:
                     protocol.sendLine(message)
 
-    def formatUsername(self, username):
+    def format_username(self, username):
         if username == self.name:
-            return "%s (** This is you)" % username
+            return "{0} (** This is you)".format(username)
         else:
-            return "%s" % username
+            return "{0}".format(username)
 
-    def getUsers(self):
+    def get_users(self):
         return self.rooms[self.currentRoom]
 
-    def nameIsFree(self, name):
+    def name_is_free(self, name):
         for room in self.rooms.values():
             if name in room:
                 return False
         return True
+
+    def log(self, s):
+        # Stub
+        print s
 
 class ChatFactory(Factory):
 
     def __init__(self):
         self.rooms = {DEFAULT_ROOM_STR : {}}
 
-    def buildProtocol(self, addr):
+    def build_protocol(self, addr):
         return Chat(self.rooms)
 
-PORT = 8007
-reactor.listenTCP(PORT, ChatFactory())
-reactor.run()
+if __name__ == '__main__':
+    if len(sys.argv) == 2:
+        try:
+            port = int(sys.argv[1])
+        except:
+            print USAGE_STR
+            exit(1)
+        reactor.listenTCP(port, ChatFactory())
+        reactor.run()
+    else:
+        print USAGE_STR
